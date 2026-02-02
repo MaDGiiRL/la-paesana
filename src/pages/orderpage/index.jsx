@@ -15,11 +15,11 @@ export default function OrderPage() {
     }, [cart]);
 
     return (
-        <div className="grid gap-6">
+        <div className="grid gap-5">
             <div>
-                <h1 className="text-4xl font-black tracking-tight">Ordina</h1>
-                <p className="mt-2 text-white/70">
-                    Nessuna registrazione. Inserisci i dati, l’ora di arrivo e invia.
+                <h1 className="ui-h1">Ordina</h1>
+                <p className="ui-muted text-sm">
+                    Nessuna registrazione. Arrivi e mangi.
                 </p>
             </div>
 

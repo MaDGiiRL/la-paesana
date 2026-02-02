@@ -1,26 +1,35 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import Carousel from "../../components/Carousel.jsx";
+import ReviewsSection from "../../components/ReviewsSection.jsx";
 import { loadJSON, LS_PROMOS } from "../../data/storage.js";
+import REVIEWS from "../../data/reviews.js";
+
+import {
+  Fish,
+  UtensilsCrossed,
+  PartyPopper,
+  Sparkles,
+  Tag,
+  ArrowRight,
+  ShoppingBag,
+} from "lucide-react";
 
 const slides = [
   {
-    title: "Pizza contemporanea. Anima paesana.",
-    subtitle: "Impasto leggero, cornicione alto, ingredienti di stagione.",
-    image:
-      "https://images.unsplash.com/photo-1601924928611-4d0b6b4f4b7b?auto=format&fit=crop&w=1400&q=80",
+    title: "Pesce fresco, cucina elegante.",
+    subtitle: "Crudi, primi di mare, grigliate. Tradizione familiare, stile moderno.",
+    image: "https://i.imgur.com/LDvRHtq.jpeg",
   },
   {
-    title: "Colori, profumi, forno acceso.",
-    subtitle: "Pranzo fisso del giorno + pizza sempre disponibile.",
-    image:
-      "https://images.unsplash.com/photo-1548365328-9f547f6d6b34?auto=format&fit=crop&w=1400&q=80",
+    title: "Menù fisso a pranzo.",
+    subtitle: "Veloce, curato, conveniente. Ogni giorno piatti nuovi.",
+    image: "https://i.imgur.com/AIbOeRk.jpeg",
   },
   {
-    title: "Cena elegante: carne & pesce.",
-    subtitle: "E la pizza non manca mai. Ordina senza registrazione.",
-    image:
-      "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&w=1400&q=80",
+    title: "Carne & pizza, sempre con qualità.",
+    subtitle: "Per chi vuole scegliere: griglia, forno, stagionalità.",
+    image: "https://i.imgur.com/uSPE5hg.jpeg",
   },
 ];
 
@@ -31,83 +40,81 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="grid gap-8">
+    <div className="ui-page grid gap-6 md:gap-8">
       <Carousel items={slides} />
 
+      {/* Highlights */}
+      <section className="grid gap-3 md:grid-cols-3">
+        {/* ... invariato ... */}
+      </section>
+
+      {/* Promos */}
       {promos.length > 0 && (
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-10">
+        <section className="ui-card p-5 md:p-7">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-3xl font-black tracking-tight">Promozioni</h2>
-              <p className="mt-2 text-white/70">Attive oggi alla Paesana.</p>
+              <div className="ui-chip inline-flex items-center gap-2">
+                <Sparkles size={16} />
+                Promozioni
+              </div>
+              <p className="mt-2 ui-muted text-sm">Attive oggi.</p>
             </div>
+
+            <Link to="/menu" className="ui-btn inline-flex items-center gap-2">
+              Vedi menu
+              <ArrowRight size={16} />
+            </Link>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
             {promos.map((p) => (
-              <div
-                key={p.id}
-                className="rounded-3xl bg-neutral-950/40 p-6 ring-1 ring-white/10"
-              >
-                <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold ring-1 ring-white/10">
+              <div key={p.id} className="ui-soft p-4">
+                <div className="ui-chip inline-flex items-center gap-2">
+                  <Tag size={16} />
                   {p.badge || "Promo"}
                 </div>
-                <div className="mt-3 text-xl font-black">{p.title}</div>
-                <div className="mt-2 text-sm text-white/65">{p.subtitle}</div>
+                <div className="mt-2 font-black">{p.title}</div>
+                <div className="mt-1 ui-muted text-sm">{p.subtitle}</div>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      <section className="grid gap-6 md:grid-cols-3">
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="text-sm font-bold text-white/70">Pranzo</div>
-          <div className="mt-2 text-xl font-black">Menù fisso del giorno</div>
-          <p className="mt-2 text-sm text-white/60">
-            Ogni giorno piatti nuovi. Quelli sono — zero indecisioni.
-          </p>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="text-sm font-bold text-white/70">Cena</div>
-          <div className="mt-2 text-xl font-black">Carne & pesce</div>
-          <p className="mt-2 text-sm text-white/60">
-            Piatti curati, vibe moderna. E pizza sempre disponibile.
-          </p>
-        </div>
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="text-sm font-bold text-white/70">Ordini</div>
-          <div className="mt-2 text-xl font-black">Zero registrazione</div>
-          <p className="mt-2 text-sm text-white/60">
-            Compila i dati, scegli l’ora di arrivo, invia. Fine.
-          </p>
-        </div>
-      </section>
+      {/* Reviews */}
+      <ReviewsSection
+        rating={4.2}
+        reviewCount={130}
+        sourceLabel="Google"
+        reviews={REVIEWS}
+      />
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-10">
-        <div className="flex flex-col items-start justify-between gap-5 md:flex-row md:items-center">
+      {/* CTA */}
+      {/* <section className="ui-card p-5 md:p-7">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-3xl font-black tracking-tight">Pronto a ordinare?</h2>
-            <p className="mt-2 text-white/70">
-              Guarda il menu del giorno e crea il tuo ordine in 1 minuto.
+            <div className="ui-chip inline-flex items-center gap-2">
+              <ShoppingBag size={16} />
+              Ordina online
+            </div>
+            <h2 className="ui-h2 mt-2">Ordina in modo semplice</h2>
+            <p className="mt-1 ui-muted text-sm">
+              Menu e checkout - veloce, chiaro, senza registrazione.
             </p>
           </div>
+
           <div className="flex gap-2">
-            <Link
-              to="/menu"
-              className="rounded-full bg-white/5 px-5 py-3 text-sm font-bold ring-1 ring-white/10 hover:bg-white/10"
-            >
-              Vedi menu
+            <Link to="/menu" className="ui-btn inline-flex items-center gap-2">
+              Apri menu
+              <ArrowRight size={16} />
             </Link>
-            <Link
-              to="/ordina"
-              className="rounded-full bg-gradient-to-r from-amber-400 via-rose-500 to-fuchsia-600 px-5 py-3 text-sm font-black text-neutral-950 shadow-lg shadow-fuchsia-600/15 hover:brightness-110"
-            >
-              Ordina ora
+            <Link to="/ordina" className="ui-btn-gold inline-flex items-center gap-2">
+              Vai al checkout
+              <ArrowRight size={16} />
             </Link>
           </div>
         </div>
-      </section>
+      </section> */}
     </div>
   );
 }

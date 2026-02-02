@@ -1,10 +1,10 @@
-import AdminGate from "../../components/AdminGate.jsx";
-import AdminDashboard from "../../components/AdminDashboard.jsx";
+import AdminGate from "../../components/admin/AdminGate.jsx";
+import AdminDashboard from "../../components/admin/AdminDashboard.jsx";
 
 export default function AdminPage() {
     return (
         <AdminGate>
-            <AdminDashboard />
+            {({ onLogout }) => <AdminDashboard onLogout={onLogout} />}
         </AdminGate>
     );
 }

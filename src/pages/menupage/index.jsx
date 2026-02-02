@@ -1,172 +1,434 @@
-import { useMemo, useState } from "react";
+// src/pages/menupage/index.jsx
+import { useMemo, useState, useEffect, useCallback } from "react";
 import DishCard from "../../components/DishCard.jsx";
-import { loadJSON, LS_MENU } from "../../data/storage.js";
+import CartSidebar from "../../components/CartSidebar.jsx";
+import DishModal from "../../components/DishModal.jsx";
+import { loadJSON, LS_MENU, LS_CART } from "../../data/storage.js";
+import MENU_SEED from "../../data/menu.js";
+
+// Helpers per righe carrello “tipo Just Eat”
+const lineIdOf = (id, notes = "") => `${id}::${(notes || "").trim()}`;
+const normalizeCart = (cart = []) =>
+  cart.map((x) => ({
+    ...x,
+    notes: x.notes || "",
+    lineId: x.lineId || lineIdOf(x.id, x.notes || ""),
+  }));
+
+const COURSE_ORDER = [
+  { key: "antipasti", label: "Antipasti" },
+  { key: "primi", label: "Primi" },
+  { key: "secondi", label: "Secondi" },
+  { key: "contorni", label: "Contorni" },
+  { key: "dolci", label: "Dolci" },
+  { key: "bevande", label: "Bevande" },
+  { key: "pizza", label: "Pizza" },
+];
+
+const PARTY_ORDER = [
+  { key: "antipasto", label: "Antipasto" },
+  { key: "primo", label: "Primo" },
+  { key: "secondo", label: "Secondo" },
+  { key: "dolce", label: "Dolce" },
+  { key: "bevande", label: "Bevande" },
+];
 
 export default function MenuPage() {
-  const [service, setService] = useState("lunch"); // lunch | dinner
+  // ✅ menu reattivo
+  const [menu, setMenu] = useState(() => loadJSON(LS_MENU, null));
+  const refreshMenu = useCallback(() => setMenu(loadJSON(LS_MENU, null)), []);
+
+  useEffect(() => {
+    const onFocus = () => refreshMenu();
+    const onStorage = (e) => {
+      if (e.key === LS_MENU) refreshMenu();
+    };
+
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [refreshMenu]);
+
+  const [tab, setTab] = useState("regular");
+  const [q, setQ] = useState("");
 
   const [cart, setCart] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("lp_cart") || "[]");
+      return normalizeCart(JSON.parse(localStorage.getItem(LS_CART) || "[]"));
     } catch {
       return [];
     }
   });
 
+  // Modal
+  const [dishModalOpen, setDishModalOpen] = useState(false);
+  const [openDish, setOpenDish] = useState(null);
+
   function persist(next) {
-    setCart(next);
-    localStorage.setItem("lp_cart", JSON.stringify(next));
+    const normalized = normalizeCart(next);
+    setCart(normalized);
+    localStorage.setItem(LS_CART, JSON.stringify(normalized));
   }
 
-  function addToCart(dish) {
-    const next = (() => {
-      const found = cart.find((x) => x.id === dish.id);
-      if (found) return cart.map((x) => (x.id === dish.id ? { ...x, qty: x.qty + 1 } : x));
-      return [...cart, { id: dish.id, name: dish.name, price: dish.price, qty: 1 }];
-    })();
+  function openModal(dish) {
+    setOpenDish(dish);
+    setDishModalOpen(true);
+  }
+  function closeModal() {
+    setDishModalOpen(false);
+    setOpenDish(null);
+  }
+
+  function addToCart(dish, qty = 1, notes = "") {
+    const lineId = lineIdOf(dish.id, notes);
+    const found = cart.find((x) => x.lineId === lineId);
+
+    const next = found
+      ? cart.map((x) => (x.lineId === lineId ? { ...x, qty: x.qty + qty } : x))
+      : [
+        ...cart,
+        {
+          id: dish.id,
+          name: dish.name,
+          price: Number(dish.price || 0),
+          qty,
+          notes: (notes || "").trim(),
+          lineId,
+        },
+      ];
+
     persist(next);
   }
 
-  const menu = useMemo(() => loadJSON(LS_MENU, null), []);
-  const lunch = menu?.lunch;
-  const dinner = menu?.dinner;
-  const pizza = menu?.pizza || [];
+  function inc(lineId) {
+    persist(cart.map((x) => (x.lineId === lineId ? { ...x, qty: x.qty + 1 } : x)));
+  }
+  function dec(lineId) {
+    persist(cart.map((x) => (x.lineId === lineId ? { ...x, qty: Math.max(1, x.qty - 1) } : x)));
+  }
+  function remove(lineId) {
+    persist(cart.filter((x) => x.lineId !== lineId));
+  }
 
-  const totalItems = useMemo(() => cart.reduce((s, it) => s + it.qty, 0), [cart]);
+  const totalItems = cart.reduce((s, x) => s + x.qty, 0);
+
+  // ======= DATA MENU =======
+  const fixed = menu?.lunchFixed || menu?.lunch || null;
+  const seasonal = menu?.seasonal || null;
+
+  // ✅ Menù festa
+  const party = menu?.party || null;
+
+  // ✅ FIX: tab visibile se active=true (anche se vuoto)
+  const partyActive = !!party?.active;
+
+  const regularItems = useMemo(() => {
+    const seed = MENU_SEED?.regularItems || [];
+    const admin = menu?.regularItems || [];
+    return [...seed, ...admin];
+  }, [menu]);
+
+  const tabs = useMemo(() => {
+    const out = [];
+    if (fixed) out.push({ key: "fixed", label: "Menù fisso" });
+    out.push({ key: "regular", label: "Menù normale" });
+    if (partyActive) out.push({ key: "party", label: party?.title || "Menù festa" });
+    if (seasonal) out.push({ key: "seasonal", label: seasonal.title || "Menù stagione" });
+    return out;
+  }, [fixed, seasonal, partyActive, party?.title]);
+
+  useEffect(() => {
+    const ok = tabs.some((t) => t.key === tab);
+    if (!ok) setTab("regular");
+  }, [tabs, tab]);
+
+  const match = (dish) => {
+    if (!q.trim()) return true;
+    const t = q.trim().toLowerCase();
+    return dish.name?.toLowerCase().includes(t) || dish.desc?.toLowerCase().includes(t);
+  };
+
+  const courseSections = useMemo(() => {
+    if (tab !== "regular") return [];
+
+    const map = new Map();
+    for (const it of regularItems || []) {
+      const course = String(it.course || "altro").toLowerCase();
+      if (!map.has(course)) map.set(course, []);
+      map.get(course).push(it);
+    }
+
+    const ordered = [];
+    for (const c of COURSE_ORDER) {
+      const items = (map.get(c.key) || []).filter(match);
+      if (items.length) {
+        ordered.push({
+          id: `course-${c.key}`,
+          key: c.key,
+          title: c.label,
+          items,
+        });
+      }
+    }
+
+    const other = (map.get("altro") || []).filter(match);
+    if (other.length) ordered.push({ id: "course-altro", key: "altro", title: "Altro", items: other });
+
+    return ordered;
+  }, [tab, regularItems, q]);
+
+  const partySections = useMemo(() => {
+    if (tab !== "party") return [];
+    if (!party) return [];
+
+    return PARTY_ORDER.map((s) => ({
+      id: `party-${s.key}`,
+      key: s.key,
+      title: s.label,
+      items: (party[s.key] || []).filter(match),
+    })).filter((sec) => sec.items.length > 0);
+  }, [tab, party, q]);
+
+  function scrollTo(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
-    <div className="grid gap-8">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-4xl font-black tracking-tight">Menu</h1>
-          <p className="mt-2 text-white/70">
-            Pranzo fisso del giorno • Cena carne & pesce • Pizza sempre
-          </p>
-        </div>
+    <div className="ui-page pb-24 md:pb-0">
+      <div className="ui-card p-4 md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <h1 className="ui-h1">Menu</h1>
+            <p className="ui-muted text-sm">{MENU_SEED?.meta?.note || "Menù ristorante"}</p>
 
-        <div className="rounded-2xl bg-white/5 px-4 py-3 text-sm ring-1 ring-white/10">
-          Carrello: <span className="font-black">{totalItems}</span> articoli
-          <span className="text-white/40"> • </span>
-          (Vai su <span className="font-semibold">Ordina</span>)
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setService("lunch")}
-          className={[
-            "rounded-full px-5 py-3 text-sm font-bold ring-1 transition",
-            service === "lunch"
-              ? "bg-white/10 ring-white/15"
-              : "bg-white/5 ring-white/10 hover:bg-white/10",
-          ].join(" ")}
-        >
-          Pranzo
-        </button>
-        <button
-          onClick={() => setService("dinner")}
-          className={[
-            "rounded-full px-5 py-3 text-sm font-bold ring-1 transition",
-            service === "dinner"
-              ? "bg-white/10 ring-white/15"
-              : "bg-white/5 ring-white/10 hover:bg-white/10",
-          ].join(" ")}
-        >
-          Cena
-        </button>
-      </div>
-
-      {/* PRANZO FISSO */}
-      {service === "lunch" && lunch && (
-        <section className="grid gap-4">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <div className="text-sm text-white/60">
-              Data: <span className="font-semibold text-white/80">{lunch.dateISO}</span>
-            </div>
-            <h2 className="mt-2 text-2xl font-black">{lunch.title}</h2>
-            {lunch.notes && <p className="mt-2 text-white/70">{lunch.notes}</p>}
+            {MENU_SEED?.meta?.copertoEServizio != null ? (
+              <p className="mt-1 ui-muted text-xs">
+                Coperto e servizio: <strong>€ {Number(MENU_SEED.meta.copertoEServizio).toFixed(2)}</strong>
+              </p>
+            ) : null}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {lunch.items?.map((dish) => (
-              <DishCard
-                key={dish.id}
-                dish={{
-                  ...dish,
-                  image:
-                    dish.image ||
-                    "https://images.unsplash.com/photo-1604909053196-1f2d5719d1e9?auto=format&fit=crop&w=1400&q=80",
-                }}
-                onAdd={addToCart}
-              />
+          <div className="flex items-center gap-2">
+            <div className="ui-chip">
+              Carrello: <strong>{totalItems}</strong>
+            </div>
+
+            <a href="/ordina" className="ui-btn-gold">
+              <span>Checkout</span>
+            </a>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+          <input value={q} onChange={(e) => setQ(e.target.value)} className="ui-input" placeholder="Cerca piatto o ingrediente…" />
+
+          <div className="flex gap-2 overflow-x-auto md:justify-end">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={[
+                  "ui-btn whitespace-nowrap",
+                  tab === t.key ? "bg-[rgba(255,200,64,0.14)] border border-[rgba(212,170,55,0.26)]" : "",
+                ].join(" ")}
+                type="button"
+              >
+                <span>{t.label}</span>
+              </button>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* CENA */}
-      {service === "dinner" && dinner && (
-        <div className="grid gap-8">
-          <section className="grid gap-4">
-            <h2 className="text-2xl font-black">Carne</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {dinner.meat?.map((dish) => (
-                <DishCard
-                  key={dish.id}
-                  dish={{
-                    ...dish,
-                    image:
-                      dish.image ||
-                      "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1400&q=80",
-                  }}
-                  onAdd={addToCart}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section className="grid gap-4">
-            <h2 className="text-2xl font-black">Pesce</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {dinner.fish?.map((dish) => (
-                <DishCard
-                  key={dish.id}
-                  dish={{
-                    ...dish,
-                    image:
-                      dish.image ||
-                      "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1400&q=80",
-                  }}
-                  onAdd={addToCart}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* PIZZA SEMPRE */}
-      <section className="grid gap-4">
-        <div className="flex items-end justify-between gap-3">
-          <h2 className="text-2xl font-black">Pizza (sempre)</h2>
-          <div className="text-sm text-white/60">Disponibile pranzo e cena</div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {pizza.map((dish) => (
-            <DishCard
-              key={dish.id}
-              dish={{
-                ...dish,
-                image:
-                  dish.image ||
-                  "https://images.unsplash.com/photo-1598023696416-0193a0bcd302?auto=format&fit=crop&w=1400&q=80",
-              }}
-              onAdd={addToCart}
-            />
-          ))}
+        {tab === "regular" ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto">
+            {courseSections.map((s) => (
+              <button key={s.id} onClick={() => scrollTo(s.id)} className="ui-btn whitespace-nowrap" type="button">
+                <span>{s.title}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {tab === "party" ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto">
+            {PARTY_ORDER.map((s) => (
+              <button key={s.key} onClick={() => scrollTo(`party-${s.key}`)} className="ui-btn whitespace-nowrap" type="button">
+                <span>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
+        <main className="grid gap-6">
+          {tab === "fixed" && fixed && (
+            <section className="grid gap-4">
+              <div className="ui-card p-4 md:p-6">
+                <div className="flex items-end justify-between gap-4">
+                  <div>
+                    <div className="ui-chip">Pranzo • Menù fisso</div>
+                    <h2 className="mt-2 ui-h2">{fixed.title || "Menù fisso del giorno"}</h2>
+                    {fixed.dateISO ? (
+                      <p className="mt-1 ui-muted text-sm">
+                        Data: <strong>{fixed.dateISO}</strong>
+                      </p>
+                    ) : null}
+                    {fixed.notes ? <p className="mt-2 ui-muted text-sm">{fixed.notes}</p> : null}
+                  </div>
+                  <div className="ui-chip">{fixed.items?.length ?? 0} piatti</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3">
+                {fixed.items?.filter(match).map((dish) => (
+                  <div key={dish.id} role="button" tabIndex={0} onClick={() => openModal(dish)} onKeyDown={(e) => e.key === "Enter" && openModal(dish)} className="cursor-pointer">
+                    <DishCard dish={dish} onAdd={(d) => addToCart(d, 1, "")} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {tab === "regular" && (
+            <section className="grid gap-8">
+              {courseSections.length === 0 ? (
+                <div className="ui-soft p-5">
+                  <div className="font-black">Nessun piatto</div>
+                  <div className="ui-muted text-sm mt-1">Non ci sono piatti da mostrare.</div>
+                </div>
+              ) : (
+                courseSections.map((sec) => (
+                  <div key={sec.id} id={sec.id} className="scroll-mt-[140px]">
+                    <div className="mb-3 flex items-end justify-between">
+                      <div>
+                        <h2 className="ui-h2">{sec.title}</h2>
+                        <p className="ui-muted text-sm">Selezione {sec.title.toLowerCase()}</p>
+                      </div>
+                      <span className="ui-chip">{sec.items.length}</span>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {sec.items.map((dish) => (
+                        <div key={dish.id} role="button" tabIndex={0} onClick={() => openModal(dish)} onKeyDown={(e) => e.key === "Enter" && openModal(dish)} className="cursor-pointer">
+                          <DishCard dish={dish} onAdd={(d) => addToCart(d, 1, "")} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </section>
+          )}
+
+          {tab === "party" && party && (
+            <section className="grid gap-6">
+              <div className="ui-card p-4 md:p-6">
+                <div className="flex items-end justify-between gap-4">
+                  <div>
+                    <div className="ui-chip">Eventi • Menù festa</div>
+                    <h2 className="mt-2 ui-h2">{party.title || "Menù festa"}</h2>
+                    {party.notes ? <p className="mt-2 ui-muted text-sm">{party.notes}</p> : null}
+                  </div>
+                  <div className="ui-chip">{partySections.reduce((s, x) => s + x.items.length, 0)} voci</div>
+                </div>
+              </div>
+
+              {partySections.length === 0 ? (
+                <div className="ui-soft p-5">
+                  <div className="font-black">Menù festa non disponibile</div>
+                  <div className="ui-muted text-sm mt-1">Contattaci per info o torna più tardi.</div>
+                </div>
+              ) : (
+                partySections.map((sec) => (
+                  <div key={sec.id} id={sec.id} className="scroll-mt-[140px]">
+                    <div className="mb-3 flex items-end justify-between">
+                      <div>
+                        <h2 className="ui-h2">{sec.title}</h2>
+                        <p className="ui-muted text-sm">Selezione {sec.title.toLowerCase()}</p>
+                      </div>
+                      <span className="ui-chip">{sec.items.length}</span>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {sec.items.map((dish) => (
+                        <div key={dish.id} role="button" tabIndex={0} onClick={() => openModal(dish)} onKeyDown={(e) => e.key === "Enter" && openModal(dish)} className="cursor-pointer">
+                          <DishCard dish={dish} onAdd={(d) => addToCart(d, 1, "")} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </section>
+          )}
+
+          {tab === "seasonal" && seasonal && (
+            <section className="grid gap-4">
+              <div className="ui-card p-4 md:p-6">
+                <div className="ui-chip">Menù stagione</div>
+                <h2 className="mt-2 ui-h2">{seasonal.title || "Speciale stagionale"}</h2>
+                <p className="mt-1 ui-muted text-sm">
+                  {seasonal.fromISO ? `Dal ${seasonal.fromISO}` : ""} {seasonal.toISO ? `al ${seasonal.toISO}` : ""}
+                </p>
+                {seasonal.notes ? <p className="mt-2 ui-muted text-sm">{seasonal.notes}</p> : null}
+              </div>
+
+              <div className="grid gap-6">
+                {(seasonal.sections || []).map((sec) => (
+                  <div key={sec.name} className="grid gap-3">
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <div className="font-black">{sec.name}</div>
+                        <div className="ui-muted text-sm">Selezione speciale</div>
+                      </div>
+                      <span className="ui-chip">{sec.items?.length ?? 0}</span>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {sec.items?.filter(match).map((dish) => (
+                        <div key={dish.id} role="button" tabIndex={0} onClick={() => openModal(dish)} onKeyDown={(e) => e.key === "Enter" && openModal(dish)} className="cursor-pointer">
+                          <DishCard dish={dish} onAdd={(d) => addToCart(d, 1, "")} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </main>
+
+        <CartSidebar cart={cart} onInc={inc} onDec={dec} onRemove={remove} />
+      </div>
+
+      <div className="md:hidden fixed bottom-3 left-0 right-0 px-3">
+        <div className="ui-card flex items-center justify-between px-4 py-3">
+          <div className="text-sm">
+            <div className="font-black">Carrello</div>
+            <div className="ui-muted text-xs">{totalItems} articoli</div>
+          </div>
+
+          <a href="/ordina" className="ui-btn-gold">
+            <span>Checkout</span>
+          </a>
         </div>
-      </section>
+      </div>
+
+      <DishModal
+        open={dishModalOpen}
+        dish={openDish}
+        onClose={closeModal}
+        onConfirm={({ dish, qty, notes }) => {
+          addToCart(dish, qty, notes);
+          closeModal();
+        }}
+      />
     </div>
   );
 }
