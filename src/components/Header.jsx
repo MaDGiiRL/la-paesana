@@ -27,7 +27,7 @@ function NavItem({ to, label }) {
 
 export default function Header() {
     return (
-        <header className="sticky top-0 z-50 h-16 border-b border-[rgba(20,20,20,0.10)] bg-[rgb(255,255,255)]/62 backdrop-blur">
+        <header className="sticky top-0 z-50 h-16 border-b border-[rgba(20,20,20,0.10)] bg-[rgb(255,255,255)]/32 backdrop-blur">
             <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
                 {/* LOGO + NAME */}
                 <Link to="/" className="flex items-center gap-3">
